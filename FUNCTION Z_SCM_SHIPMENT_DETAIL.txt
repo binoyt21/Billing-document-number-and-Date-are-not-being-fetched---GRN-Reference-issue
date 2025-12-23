@@ -1,0 +1,746 @@
+FUNCTION Z_SCM_SHIPMENT_DETAIL
+  IMPORTING
+    I_TRUCK_NO TYPE YCONTNO OPTIONAL
+    I_TRANSPTRCD TYPE CHAR10 OPTIONAL
+    I_SHNUMBER TYPE TKNUM OPTIONAL
+    I_IBD_NO TYPE VBELN_NACH OPTIONAL
+  EXPORTING
+    E_SHNUMBER TYPE TKNUM
+    E_LR_NO TYPE YLRNO
+    E_CREATED_ON TYPE DATUM
+    E_INVOICE TYPE XBLNR_V1
+    E_INV_DATE TYPE EXDAT
+    E_TRUCK_NO TYPE ZTRUCK_NO
+    E_QUANTITY_L TYPE FKIMG
+    E_VBELN_D TYPE VBELN_VL
+    E_PO_NUMBER TYPE EBELN
+    E_TRANSPTRCD TYPE TDLNR
+    E_MAT_DOC TYPE MBLNR
+    E_MATNR TYPE MATNR
+    E_MAT_DESC TYPE MAKTX
+    E_UOM TYPE MEINS
+    E_BOENO TYPE /OBIZ/ZMB_BOENO
+    E_BOEDT TYPE ZBOEDT
+    ET_SHIP_DETAILS TYPE ZSCM_SHIPMENT_DETAILS_TT
+  EXCEPTIONS
+    TRUCK_NO_NOT_FOUND
+    TKNUM_NOT_FOUND.
+
+
+
+
+  TYPES: BEGIN OF ty_oigs,
+          shnumber TYPE oig_shnum,
+          shtype   TYPE oig_tdstyp,
+          tplst    TYPE tplst,
+          carrier  TYPE tdlnr,
+          oig_sstsf TYPE oig_sstsf,
+        END OF ty_oigs,
+
+        BEGIN OF lty_oigsv,
+          shnumber TYPE	oig_shnum,
+          carrier	 TYPE oig_lifnr,
+        END OF lty_oigsv,
+
+        BEGIN OF ty_vttk,
+          tknum TYPE tknum,
+          shtyp TYPE shtyp,
+          tplst TYPE tplst,
+          tdlnr TYPE tdlnr,
+        END OF ty_vttk,
+
+        BEGIN OF ty_vttp,
+          tknum TYPE tknum,
+          vbeln TYPE vbeln_vl,
+        END OF ty_vttp,
+
+        BEGIN OF ty_oigsi,
+          shnumber    TYPE oig_shnum,
+          doc_number  TYPE oig_docnr,
+        END OF ty_oigsi,
+
+        BEGIN OF ty_lips,
+          vbeln TYPE vbeln_vl,
+          matnr TYPE matnr,
+          lfimg TYPE lfimg,
+          meins TYPE meins,
+          arktx TYPE arktx,
+          vgbel TYPE vgbel,
+        END OF ty_lips,
+
+        BEGIN OF ty_zptc_lrpo,
+          lr_no      TYPE ylrno,
+          exnum      TYPE xblnr_v1,
+          exdat      TYPE exdat,
+          ebeln      TYPE ebeln,
+          truck_no   TYPE ztruck_no,
+          quantity_l TYPE fkimg,
+          shnumber   TYPE oig_shnum,
+          mblnr      TYPE mblnr,
+          vbeln_d    TYPE vbeln_vl,
+          created_on TYPE erdat,
+          boeno      TYPE /obiz/zmb_boeno,
+          boedt      TYPE zboedt,
+        END OF ty_zptc_lrpo.
+  TYPES: BEGIN OF ty_vbrp,
+          vbeln TYPE vbrp-vbeln,
+          vgbel TYPE vbrp-vgbel,
+        END OF ty_vbrp.
+  TYPES: BEGIN OF ty_vbrk,
+          vbeln     TYPE vbrk-vbeln,
+          vbtyp     TYPE vbrk-vbtyp,
+          fkdat     TYPE vbrk-fkdat,
+          erdat     TYPE vbrk-erdat,
+          fkdat_rl  TYPE vbrk-fkdat_rl,
+          fksto     TYPE vbrk-fksto,
+        END OF ty_vbrk.
+  TYPES: BEGIN OF lty_yttstx0002,
+          report_no   TYPE yttstx0002-report_no,
+          dlivry_no   TYPE yttstx0002-dlivry_no,
+          ebeln       TYPE yttstx0002-ebeln,
+          dlvry_qty1  TYPE yttstx0002-dlvry_qty1,
+          lr_no       TYPE yttstx0002-lr_no,
+          lr_dt       TYPE yttstx0002-lr_dt,
+          delivery    TYPE yttstx0002-delivery,
+          billno      TYPE yttstx0002-billno,
+          invoice_dt  TYPE yttstx0002-invoice_dt,
+          shnumber    TYPE yttstx0002-shnumber,
+        END OF lty_yttstx0002.
+
+  TYPES: BEGIN OF lty_zlog_exec_var,
+          name    TYPE zlog_exec_var-name,
+          shtyp   TYPE shtyp,
+          active  TYPE zlog_exec_var-active,
+          remarks TYPE zlog_exec_var-remarks,
+        END OF lty_zlog_exec_var.
+  TYPES: BEGIN OF lty_yttstx0001,
+          report_no TYPE yttstx0001-report_no,
+          truck_no  TYPE yttstx0001-truck_no,
+        END OF lty_yttstx0001.
+
+  TYPES: BEGIN OF lty_vbfa,
+          vbelv	  TYPE vbeln_von,
+          posnv	  TYPE posnr_von,
+          vbeln	  TYPE vbeln_nach,
+          posnn	  TYPE posnr_nach,
+          vbtyp_n	TYPE vbtyp_n,
+        END OF lty_vbfa.
+  DATA: lt_vbfa TYPE TABLE OF lty_vbfa,
+        lw_vbfa TYPE lty_vbfa.
+
+  DATA : lt_zlog_exec_var TYPE TABLE OF lty_zlog_exec_var,
+         lw_zlog_exec_var TYPE          lty_zlog_exec_var,
+         lt_yttstx0002    TYPE TABLE OF lty_yttstx0002,
+         lt_yttstx0002_t  TYPE TABLE OF lty_yttstx0002,
+         lw_yttstx0002    TYPE          lty_yttstx0002,
+         lt_yttstx0001    TYPE TABLE OF lty_yttstx0001,
+         lw_yttstx0001    TYPE          lty_yttstx0001.
+
+  DATA: lw_oigs TYPE ty_oigs,
+        lw_oigsv TYPE lty_oigsv,
+        lw_zptc_lrpo TYPE ty_zptc_lrpo,
+        lw_log_exec TYPE zlog_exec_var,
+        lw_vttk    TYPE ty_vttk,
+        lw_vttp    TYPE ty_vttp,
+        lv_ibd_no  TYPE vbeln_nach, "added by omkar more on 27.03.2025 TR:RD2K9A54D8
+        lt_vttp    TYPE TABLE OF ty_vttp,
+        lt_vttp_temp TYPE TABLE OF ty_vttp, " added by omkar more on 07.10.2025 CD:8085910 TR:RD2K9A5CZ4
+        lv_delivery_qty_sum TYPE yig_cmpqua,
+        lt_vttp_og    TYPE TABLE OF ty_vttp,
+        lw_oigsi   TYPE ty_oigsi,
+        lt_oigsi   TYPE TABLE OF ty_oigsi,
+        lw_lips    TYPE ty_lips,
+        lt_lips    TYPE TABLE OF ty_lips,
+        lw_flag    TYPE c,
+        lt_vbrk    TYPE TABLE OF ty_vbrk,
+        lw_vbrk    TYPE ty_vbrk,
+        lw_shtyp   TYPE shtyp,
+        lw_vbrp    TYPE ty_vbrp,
+        lt_vbrp    TYPE TABLE OF ty_vbrp,
+        lv_vbeln   TYPE vbeln_vl.
+  DATA : lw_shipment_details TYPE zscm_shipment_details_tty.   " Added by Husna Basri TR : RD2K9A54D8
+  DATA : ltr_remark  TYPE RANGE OF zlog_exec_var-remarks,
+         lwr_remark  LIKE LINE OF  ltr_remark,
+         lv_shtyp TYPE shtyp.
+
+  FIELD-SYMBOLS:<lfs_shipment_details> TYPE zscm_shipment_details_tty."Added by SN Das CD:8082040
+
+  CONSTANTS: lc_name TYPE zlog_exec_var-name VALUE 'ZSCE_REC_INB_SHTYP',
+             lc_x    TYPE c VALUE 'X',
+             lc_7    TYPE vbtyp_n VALUE '7'. "added by omkar more on 27.03.2025 TR:RD2K9A54D8
+
+  IF i_truck_no IS NOT INITIAL AND i_shnumber IS INITIAL.
+    CLEAR: lw_shtyp.
+    SELECT SINGLE shtyp
+      FROM zlog_exec_var
+      INTO lw_shtyp
+      WHERE name EQ lc_name.
+    IF NOT sy-subrc IS INITIAL.
+      CLEAR lw_shtyp.
+    ENDIF.
+
+    SELECT SINGLE tknum
+      FROM vttk
+      INTO e_shnumber
+      WHERE signi EQ i_truck_no AND
+            shtyp EQ lw_shtyp AND
+            stabf EQ lc_x AND
+            stlbg EQ space.
+    IF NOT sy-subrc IS  INITIAL.
+      RAISE truck_no_not_found.
+    ENDIF.
+  ENDIF.
+
+  IF i_shnumber IS NOT INITIAL.
+    CLEAR lw_flag.
+    SELECT SINGLE tknum shtyp tplst tdlnr
+      FROM vttk
+      INTO lw_vttk
+      WHERE tknum EQ i_shnumber.
+    IF sy-subrc IS INITIAL.
+      SELECT SINGLE shtyp
+        FROM zlog_exec_var
+        INTO lw_shtyp
+        WHERE name EQ lc_name AND
+              shtyp EQ lw_vttk-shtyp AND
+              transplpt EQ lw_vttk-tplst.
+      IF sy-subrc IS INITIAL.
+        lw_flag = abap_true.
+      ENDIF.
+    ENDIF.
+
+    IF i_shnumber IS NOT INITIAL AND i_ibd_no IS INITIAL. " added by omkar more on 07.10.2025 CD:8085910 TR:RD2K9A5CZ4
+
+      REFRESH lt_vttp.
+      SELECT tknum vbeln FROM vttp CLIENT SPECIFIED  " changed for multiple / added by omkar more on 07.10.2025 CD:8085910 TR:RD2K9A5CZ4
+      INTO TABLE lt_vttp
+      WHERE mandt = sy-mandt
+      AND   tknum = i_shnumber.
+      IF sy-subrc <> 0.
+        REFRESH lt_vttp.
+      ENDIF.
+
+    ELSEIF  i_shnumber IS NOT INITIAL AND  i_ibd_no IS NOT INITIAL. " added by omkar more on 07.10.2025 CD:8085910 TR:RD2K9A5CZ4
+      " soc by omkar more on 07.10.2025 CD:8085910 TR:RD2K9A5CZ4
+      " Fetch shipment data based on input delivery for solid inbound scenario
+      REFRESH lt_vttp.
+      SELECT tknum vbeln FROM vttp CLIENT SPECIFIED
+      INTO TABLE lt_vttp
+      WHERE mandt  = sy-mandt
+      AND   vbeln  = i_ibd_no     "Secondary Index VTTP~VBL Used
+      AND   tknum  = i_shnumber.
+      IF sy-subrc <> 0.
+        REFRESH lt_vttp.
+      ENDIF.
+      " eoc by omkar more on 07.10.2025 CD:8085910 TR:RD2K9A5CZ4
+    ENDIF.
+
+    REFRESH lt_vttp_temp. " added by omkar more on 07.10.2025 CD:8085910 TR:RD2K9A5CZ4
+    lt_vttp_temp = lt_vttp.
+    DELETE lt_vttp_temp WHERE vbeln IS INITIAL.
+    SORT   lt_vttp_temp BY    vbeln.
+    DELETE ADJACENT DUPLICATES FROM lt_vttp_temp COMPARING vbeln.
+    IF lt_vttp_temp IS NOT INITIAL.
+      REFRESH lt_lips.
+      SELECT vbeln matnr lfimg meins arktx vgbel " changed for multiple/ added by omkar more on 07.10.2025 CD:8085910 TR:RD2K9A5CZ4
+      FROM lips CLIENT SPECIFIED
+      INTO TABLE lt_lips
+      FOR ALL ENTRIES IN lt_vttp_temp
+      WHERE mandt = sy-mandt
+      AND   vbeln = lt_vttp_temp-vbeln.
+      IF sy-subrc = 0.
+        SORT lt_lips BY vbeln.
+      ENDIF.
+    ENDIF.
+
+
+    CLEAR:lw_zlog_exec_var.
+    SELECT name
+           shtyp
+           active
+           remarks
+FROM  zlog_exec_var INTO lw_zlog_exec_var
+WHERE name  = 'ZSCM_IMPORT_SHTYP' AND
+      shtyp = lw_vttk-shtyp AND
+      transplpt = lw_vttk-tplst AND
+      active = 'X'.
+    ENDSELECT.
+    "soc by omkar more on 27.03.2025 TR:RD2K9A54D8
+    " Get Subsequent sales and distribution document
+    IF sy-subrc NE 0.
+
+      IF lt_vttp_temp IS NOT INITIAL.
+        REFRESH lt_vbfa.
+        SELECT  vbelv
+                posnv
+                vbeln
+                posnn
+                vbtyp_n
+        FROM vbfa CLIENT SPECIFIED
+        INTO TABLE lt_vbfa
+        FOR ALL ENTRIES IN lt_vttp_temp
+        WHERE mandt   = sy-mandt
+        AND   vbelv   = lt_vttp_temp-vbeln
+        AND   vbtyp_n = lc_7 " 7
+        %_HINTS ORACLE 'INDEX("VBFA""VBFA~Y02")'.
+        IF sy-subrc EQ 0.
+          SORT lt_vbfa BY vbelv.
+        ENDIF.
+      ENDIF.
+      "eoc by omkar more on 27.03.2025 TR:RD2K9A54D8
+    ENDIF.
+    IF NOT lw_flag IS INITIAL.
+
+      CLEAR lw_vttp.
+      LOOP AT lt_vttp INTO lw_vttp.
+
+        CLEAR lw_lips.
+        READ TABLE lt_lips INTO lw_lips WITH KEY vbeln = lw_vttp-vbeln BINARY SEARCH.
+        IF sy-subrc = 0.
+          lw_shipment_details-quantity_l  = lw_lips-lfimg.
+          lw_shipment_details-po_number   = lw_lips-vgbel.
+          lw_shipment_details-matnr       = lw_lips-matnr.
+          lw_shipment_details-mat_desc    = lw_lips-arktx.
+          lw_shipment_details-uom         = lw_lips-meins.
+        ENDIF.
+        " SOC Husna Basri TR : 21/03/2025
+        lw_shipment_details-shnumber     = i_shnumber.
+        lw_shipment_details-vbeln_d      = lw_vttp-vbeln.
+        " BEGIN: Modified for RD2-211 - Always assign delivery number as GRN reference
+        " Change Date: 23.12.2025
+        " Changed By: [DEVELOPER ID]
+        " Transport: [TR NUMBER]
+        " Description: Removed conditional check to ensure delivery number is always
+        "              populated as GRN reference. Subsequent document logic in lines
+        "              315-319 will override when applicable.
+*        IF lw_zlog_exec_var IS NOT INITIAL.
+        lw_shipment_details-ibd_no     = lw_vttp-vbeln.
+*        ENDIF.
+        " END: Modified for RD2-211
+        lw_shipment_details-transptrcd   = lw_vttk-tdlnr.
+
+        "soc by omkar more on 27.03.2025 TR:RD2K9A54D8
+        CLEAR lw_vbfa.
+        READ TABLE lt_vbfa INTO lw_vbfa WITH KEY vbelv = lw_vttp-vbeln BINARY SEARCH.
+        IF sy-subrc = 0.
+          lw_shipment_details-ibd_no = lw_vbfa-vbeln. "Subsequent sales and distribution document
+        ENDIF.
+        "eoc by omkar more on 27.03.2025 TR:RD2K9A54D8
+
+        APPEND lw_shipment_details TO et_ship_details.
+        CLEAR : lw_shipment_details.
+        " EOC Husna Basri TR : 21/03/2025
+
+      ENDLOOP.
+
+      CLEAR lw_shipment_details. " added by omkar more on 07.10.2025 CD:8085910 TR:RD2K9A5CZ4
+      READ TABLE et_ship_details INTO lw_shipment_details INDEX 1. " only show first entry
+      IF sy-subrc = 0.
+        e_shnumber                         = lw_shipment_details-shnumber.
+        e_vbeln_d                          = lw_shipment_details-vbeln_d.
+        e_transptrcd                       = lw_shipment_details-transptrcd.
+        e_quantity_l                       = lw_shipment_details-quantity_l.
+        e_po_number                        = lw_shipment_details-po_number.
+        e_matnr                            = lw_shipment_details-matnr.
+        e_mat_desc                         = lw_shipment_details-mat_desc.
+        e_uom                              = lw_shipment_details-uom.
+      ENDIF.
+      CLEAR lw_shipment_details.
+
+    ELSE.
+      IF lw_vttk-tknum IS INITIAL.
+        SELECT SINGLE shnumber shtype tplst carrier oig_sstsf
+          FROM oigs
+          INTO lw_oigs
+          WHERE shnumber EQ i_shnumber AND
+                oig_sstsf EQ 4.
+        IF sy-subrc IS INITIAL.
+
+
+          IF i_shnumber IS NOT INITIAL AND i_ibd_no IS INITIAL. " added by omkar more on 07.10.2025 CD:8085910 TR:RD2K9A5CZ4
+            CLEAR lw_oigsi.
+            SELECT SINGLE shnumber doc_number
+            FROM oigsi
+            INTO lw_oigsi
+            WHERE shnumber EQ i_shnumber.
+            IF sy-subrc <> 0.
+              CLEAR lw_oigsi.
+            ENDIF.
+          ELSEIF  i_shnumber IS NOT INITIAL AND  i_ibd_no IS NOT INITIAL. " added by omkar more on 07.10.2025 CD:8085910 TR:RD2K9A5CZ4
+            " soc by omkar more on 07.10.2025 CD:8085910 TR:RD2K9A5CZ4
+            " Fetch shipment data based on input delivery provided for liquid inbound scenario
+            CLEAR lw_oigsi.
+            SELECT shnumber doc_number FROM oigsi CLIENT SPECIFIED UP TO 1 ROWS
+            INTO  lw_oigsi
+            WHERE client     = sy-mandt
+            AND   shnumber   = i_shnumber
+            AND   doc_number = i_ibd_no.
+            ENDSELECT.
+            IF sy-subrc <> 0.
+              CLEAR lw_oigsi.
+            ENDIF.
+            " eoc by omkar more on 07.10.2025 CD:8085910 TR:RD2K9A5CZ4
+          ENDIF.
+*          IF sy-subrc IS INITIAL.
+          IF lw_oigsi-doc_number IS NOT INITIAL.
+            CLEAR lw_lips.
+            SELECT SINGLE vbeln matnr lfimg meins arktx vgbel
+              FROM lips
+              INTO lw_lips
+              WHERE vbeln EQ lw_oigsi-doc_number.
+          ENDIF.
+        ELSE.
+          RAISE tknum_not_found.
+          RETURN.
+        ENDIF.
+        SELECT SINGLE shtyp
+         FROM zlog_exec_var
+         INTO lw_shtyp
+         WHERE name EQ lc_name AND
+               shtyp EQ lw_oigs-shtype AND
+               transplpt EQ lw_oigs-tplst.
+        IF sy-subrc IS INITIAL.
+          lw_flag = abap_true.
+        ENDIF.
+      ENDIF.
+
+      IF i_shnumber IS NOT INITIAL.
+        CLEAR lw_oigsv.
+        SELECT shnumber carrier FROM oigsv CLIENT SPECIFIED UP TO 1 ROWS
+        INTO lw_oigsv
+        WHERE client    = sy-mandt
+        AND   shnumber  = i_shnumber.
+        ENDSELECT.
+        IF sy-subrc <> 0.
+          CLEAR lw_oigsv.
+        ENDIF.
+      ENDIF.
+
+      IF lw_flag IS INITIAL.
+        SELECT SINGLE lr_no
+               exnum
+               exdat
+               ebeln
+               truck_no
+               quantity_l
+               shnumber
+               mblnr
+               vbeln_d
+               created_on
+               boeno
+               boedt
+          FROM zptc_lrpo
+          INTO lw_zptc_lrpo
+          WHERE shnumber EQ i_shnumber.
+        IF sy-subrc IS INITIAL.
+          e_shnumber = i_shnumber.
+          e_lr_no    = lw_zptc_lrpo-lr_no.
+          e_created_on = lw_zptc_lrpo-created_on.
+          " BEGIN: Modified for RD2-211 - Use delivery number instead of external number
+          " Change Date: 23.12.2025
+          " Changed By: [DEVELOPER ID]
+          " Transport: [TR NUMBER]
+          " Description: Changed from exnum (external invoice number) to vbeln_d
+          "              (delivery number) for accurate document reference
+          e_invoice = lw_zptc_lrpo-vbeln_d.
+          " END: Modified for RD2-211
+          e_inv_date = lw_zptc_lrpo-exdat.
+          e_po_number = lw_zptc_lrpo-ebeln.
+          e_truck_no = lw_zptc_lrpo-truck_no.
+          e_quantity_l = lw_zptc_lrpo-quantity_l.
+          e_vbeln_d = lw_zptc_lrpo-vbeln_d.
+          e_boeno = lw_zptc_lrpo-boeno.
+          e_boedt = lw_zptc_lrpo-boedt.
+          e_mat_doc = lw_zptc_lrpo-mblnr.
+          IF NOT lw_vttk-tdlnr IS INITIAL.
+            e_transptrcd = lw_vttk-tdlnr.
+          ELSE.
+            e_transptrcd = lw_oigsv-carrier."lw_oigs-carrier.
+          ENDIF.
+          e_matnr = lw_lips-matnr.
+          e_mat_desc = lw_lips-arktx.
+          e_uom = lw_lips-meins.
+          " SOC Husna Basri TR : 21/03/2025
+          lw_shipment_details-shnumber    = i_shnumber.
+          lw_shipment_details-lr_no       = lw_zptc_lrpo-lr_no.
+          lw_shipment_details-created_on  = lw_zptc_lrpo-created_on.
+          lw_shipment_details-invoice     = lw_zptc_lrpo-exnum.
+          lw_shipment_details-inv_date    = lw_zptc_lrpo-exdat.
+          lw_shipment_details-po_number   = lw_zptc_lrpo-ebeln.
+          lw_shipment_details-truck_no    = lw_zptc_lrpo-truck_no.
+
+          lw_shipment_details-vbeln_d     = lw_zptc_lrpo-vbeln_d.
+          lw_shipment_details-boeno       = lw_zptc_lrpo-boeno.
+          lw_shipment_details-boedt       = lw_zptc_lrpo-boedt.
+          lw_shipment_details-mat_doc     = lw_zptc_lrpo-mblnr.
+          IF NOT lw_vttk-tdlnr IS INITIAL.
+            lw_shipment_details-transptrcd = lw_vttk-tdlnr.
+          ELSE.
+            lw_shipment_details-quantity_l  = lw_zptc_lrpo-quantity_l.
+            lw_shipment_details-transptrcd = lw_oigsv-carrier."lw_oigs-carrier.
+          ENDIF.
+          lw_shipment_details-matnr     = lw_lips-matnr.
+          lw_shipment_details-mat_desc  = lw_lips-arktx.
+          lw_shipment_details-uom       = lw_lips-meins.
+          lw_shipment_details-ibd_no   = lw_shipment_details-vbeln_d.
+          APPEND lw_shipment_details TO et_ship_details.
+          CLEAR : lw_shipment_details.
+          " EOC Husna Basri TR : 21/03/2025
+        ELSE.
+          " SOC Husna Basri TR : RD2K9A54D8 Dated : 11/03/2025
+          CLEAR : lt_vttp,lv_vbeln.
+          SELECT tknum
+                 vbeln
+                 FROM vttp
+                 INTO TABLE lt_vttp
+                 WHERE tknum EQ i_shnumber.
+          IF sy-subrc <> 0.
+            CLEAR : lt_oigsi.
+            SELECT shnumber
+                   doc_number
+                   FROM oigsi
+                   INTO TABLE lt_oigsi
+                   WHERE shnumber EQ i_shnumber.
+            IF sy-subrc = 0.
+              SORT lt_oigsi BY shnumber.
+            ENDIF.
+          ENDIF.
+          CLEAR : lt_vttp_og[].
+          IF lt_vttp IS NOT INITIAL.
+            lt_vttp_og[] = lt_vttp[].
+          ELSEIF lt_oigsi IS NOT INITIAL.
+            CLEAR : lw_oigsi.
+            LOOP AT lt_oigsi INTO lw_oigsi.
+              lw_vttp-tknum   = lw_oigsi-shnumber.
+              lw_vttp-vbeln   = lw_oigsi-doc_number.
+              APPEND lw_vttp TO lt_vttp_og.
+              CLEAR : lw_vttp,lw_oigsi.
+            ENDLOOP.
+          ENDIF.
+          SORT lt_vttp_og BY vbeln.
+          DELETE ADJACENT DUPLICATES FROM lt_vttp_og COMPARING vbeln.
+
+          IF lt_vttp_og IS NOT INITIAL.
+            SELECT vbeln
+                   vgbel
+                   FROM vbrp CLIENT SPECIFIED
+                   INTO TABLE lt_vbrp
+                   FOR ALL ENTRIES IN lt_vttp_og
+                   WHERE mandt = sy-mandt
+                   AND   vgbel = lt_vttp_og-vbeln.
+            IF sy-subrc = 0.
+            ENDIF.
+          ENDIF.
+          CLEAR : lt_zlog_exec_var[].
+          SELECT  name
+                  shtyp
+                  active
+                  remarks
+                  FROM  zlog_exec_var CLIENT SPECIFIED
+                  INTO TABLE lt_zlog_exec_var
+                  WHERE mandt = sy-mandt
+                  AND   name  = 'ZSCE_VBTYP_SHDTL'
+                  AND   active = 'X'.
+          IF sy-subrc = 0.
+            CLEAR : lw_zlog_exec_var,ltr_remark[].
+            LOOP AT lt_zlog_exec_var INTO lw_zlog_exec_var.
+              lwr_remark-sign  = 'I'.
+              lwr_remark-option  = 'EQ'.
+              lwr_remark-low  = lw_zlog_exec_var-remarks.
+              APPEND lwr_remark TO ltr_remark.
+              CLEAR :lwr_remark.
+            ENDLOOP.
+            SORT ltr_remark BY low.
+            DELETE ADJACENT DUPLICATES FROM ltr_remark COMPARING low.
+            DELETE ltr_remark WHERE low IS INITIAL.
+          ENDIF.
+
+          SORT : lt_vbrp[] BY vbeln.
+          IF lt_vbrp[] IS NOT INITIAL.
+            SELECT  vbeln
+                    vbtyp
+                    fkdat
+                    erdat
+                    fkdat_rl
+                    fksto
+                    FROM vbrk
+                    INTO TABLE lt_vbrk
+                    FOR ALL ENTRIES IN lt_vbrp
+                    WHERE vbeln = lt_vbrp-vbeln.
+            IF sy-subrc = 0.
+              SORT lt_vbrk BY vbeln vbtyp.
+              DELETE lt_vbrk WHERE vbtyp NOT IN ltr_remark.
+              DELETE lt_vbrk WHERE fksto IS NOT INITIAL.
+            ENDIF.
+          ENDIF.
+          SELECT  report_no
+                  dlivry_no
+                  ebeln
+                  dlvry_qty1
+                  lr_no
+                  lr_dt
+                  delivery
+                  billno
+                  invoice_dt
+                  shnumber
+                  FROM yttstx0002 CLIENT SPECIFIED
+                  INTO TABLE lt_yttstx0002
+                  WHERE mandt = sy-mandt
+                  AND   shnumber = i_shnumber
+                 %_HINTS ORACLE 'INDEX("YTTSTX0002""YTTSTX0002~ZSH")'.
+          IF sy-subrc = 0.
+            SORT lt_yttstx0002 BY shnumber.
+          ENDIF.
+
+          CLEAR : lt_yttstx0002_t[].
+          lt_yttstx0002_t[] = lt_yttstx0002[].
+          SORT lt_yttstx0002_t BY report_no.
+          DELETE ADJACENT DUPLICATES FROM  lt_yttstx0002_t COMPARING report_no.
+          IF lt_yttstx0002_t[] IS NOT INITIAL.
+            SELECT  report_no
+                    truck_no
+                    FROM yttstx0001 CLIENT SPECIFIED
+                    INTO TABLE lt_yttstx0001
+                    FOR ALL ENTRIES IN lt_yttstx0002_t
+                    WHERE mandt = sy-mandt
+                    AND  report_no = lt_yttstx0002_t-report_no
+                   %_HINTS ORACLE 'INDEX("YTTSTX0001""YTTSTX0001~Y02")'.
+            IF sy-subrc = 0.
+              SORT lt_yttstx0001 BY report_no.
+            ENDIF.
+          ENDIF.
+          " EOC Husna Basri TR : RD2K9A54D8 Dated : 11/03/2025
+        ENDIF.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+
+  " SOC Husna Basri TR : RD2K9A54D8 Dated : 18/03/2025
+  SORT : lt_yttstx0002 BY shnumber delivery.
+  SORT : lt_vbrp BY vgbel.
+  CLEAR : lw_vttp.
+  LOOP AT lt_vttp_og INTO lw_vttp.
+    CLEAR : lw_vbrp.
+    lw_shipment_details-shnumber  = lw_vttp-tknum.
+    READ TABLE lt_vbrp INTO lw_vbrp WITH KEY vgbel = lw_vttp-vbeln
+                                             BINARY SEARCH.
+    IF sy-subrc = 0.
+      CLEAR : lw_zlog_exec_var.
+      READ TABLE lt_zlog_exec_var INTO lw_zlog_exec_var WITH KEY name  = 'ZSCE_VBTYP_SHDTL'.
+      IF sy-subrc = 0.
+        CLEAR : lw_vbrk.
+        READ TABLE lt_vbrk INTO lw_vbrk WITH KEY vbeln = lw_vbrp-vbeln
+                                                 vbtyp = lw_zlog_exec_var-remarks BINARY SEARCH.
+        IF sy-subrc = 0.
+          lw_shipment_details-created_on  = lw_vbrk-erdat.
+          lw_shipment_details-invoice     = lw_vbrk-vbeln.
+          lw_shipment_details-inv_date    = lw_vbrk-fkdat.
+          CLEAR : lw_yttstx0002.
+          READ TABLE lt_yttstx0002 INTO lw_yttstx0002 WITH KEY shnumber = i_shnumber
+                                                               delivery = lw_vttp-vbeln BINARY SEARCH.
+          IF sy-subrc = 0.
+            lw_shipment_details-lr_no       = lw_yttstx0002-lr_no.
+            lw_shipment_details-po_number   = lw_yttstx0002-dlivry_no.
+            lw_shipment_details-vbeln_d     = lw_yttstx0002-delivery.
+            lv_delivery_qty_sum = lv_delivery_qty_sum + lw_yttstx0002-dlvry_qty1.
+            CLEAR : lw_yttstx0001.
+            READ TABLE lt_yttstx0001 INTO lw_yttstx0001 WITH KEY report_no = lw_yttstx0002-report_no
+                                                                 BINARY SEARCH.
+            IF sy-subrc = 0.
+              lw_shipment_details-truck_no    = lw_yttstx0001-truck_no.
+            ENDIF.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+
+    IF NOT lw_vttk-tdlnr IS INITIAL.
+      lw_shipment_details-transptrcd = lw_vttk-tdlnr.
+    ELSE.
+      lw_shipment_details-transptrcd = lw_oigs-carrier.
+    ENDIF.
+
+    "soc by omkar more on 27.03.2025 TR:RD2K9A54D8
+    CLEAR lw_vbfa.
+    READ TABLE lt_vbfa INTO lw_vbfa WITH KEY vbelv = lw_vttp-vbeln BINARY SEARCH.
+    IF sy-subrc = 0.
+      lw_shipment_details-ibd_no = lw_vbfa-vbeln.
+    ENDIF.
+    IF lv_delivery_qty_sum IS NOT INITIAL.
+      lw_shipment_details-quantity_l  = lv_delivery_qty_sum.
+    ELSE.
+      lw_shipment_details-quantity_l  = lw_zptc_lrpo-quantity_l.
+    ENDIF.
+    lw_shipment_details-boeno       = lw_zptc_lrpo-boeno.
+    lw_shipment_details-boedt       = lw_zptc_lrpo-boedt.
+    lw_shipment_details-mat_doc     = lw_zptc_lrpo-mblnr.
+    lw_shipment_details-matnr       = lw_lips-matnr.
+    lw_shipment_details-mat_desc    = lw_lips-arktx.
+    lw_shipment_details-uom         = lw_lips-meins.
+    "eoc by omkar more on 27.03.2025 TR:RD2K9A54D8
+    APPEND lw_shipment_details TO et_ship_details.
+    CLEAR : lw_vttp,lw_vbrp,lw_shipment_details,lw_yttstx0001,lw_yttstx0002,lw_vbrk,lw_zlog_exec_var,lv_delivery_qty_sum.
+  ENDLOOP.
+
+  IF i_ibd_no IS NOT INITIAL.
+    DELETE et_ship_details WHERE ibd_no NE i_ibd_no. " added by omkar more on 27.03.2025 TR:RD2K9A54D8
+  ENDIF.
+
+  CLEAR lw_shipment_details.
+  READ TABLE et_ship_details INTO lw_shipment_details INDEX 1. " only show first entry
+  IF sy-subrc = 0.
+    e_created_on = lw_shipment_details-created_on.
+    IF lw_zlog_exec_var IS NOT INITIAL.
+      e_invoice = lw_shipment_details-ibd_no.
+    ELSE.
+      e_invoice    = lw_shipment_details-invoice.
+    ENDIF.
+
+    e_inv_date   = lw_shipment_details-inv_date.
+    e_lr_no      = lw_shipment_details-lr_no.
+    e_po_number  = lw_shipment_details-po_number.
+    e_vbeln_d    = lw_shipment_details-vbeln_d.
+    e_truck_no   = lw_shipment_details-truck_no.
+    e_transptrcd = lw_shipment_details-transptrcd.
+    e_uom        = lw_shipment_details-uom.
+    e_mat_desc   = lw_shipment_details-mat_desc.
+    e_matnr      = lw_shipment_details-matnr.
+    e_shnumber   = i_shnumber.
+    e_quantity_l = lw_shipment_details-quantity_l.
+    e_boeno      = lw_zptc_lrpo-boeno.
+    e_boedt      = lw_zptc_lrpo-boedt.
+
+    " BEGIN: Cursor Generated Code
+    IF e_invoice IS NOT INITIAL.
+      e_mat_doc = lw_shipment_details-invoice.
+    ELSE.
+*    IF lw_zlog_exec_var IS NOT INITIAL.
+      IF lw_shipment_details-ibd_no IS NOT INITIAL.
+        e_mat_doc = lw_shipment_details-ibd_no.
+      ELSE.
+        e_mat_doc    = lw_zptc_lrpo-mblnr.
+      ENDIF.
+    ENDIF.
+    " END: Cursor Generated Code
+
+
+  ENDIF.
+
+  " EOC Husna Basri TR : RD2K9A54D8 Dated : 18/03/2025
+
+* Added by SN Das CD:8082040(Start)
+
+  SELECT shtyp FROM zlog_exec_var UP TO 1 ROWS
+  INTO lv_shtyp WHERE name = 'ZSCM_IMPORT_SHTYP' AND
+                      shtyp = lw_vttk-shtyp  AND
+                      transplpt = lw_vttk-tplst AND
+                      active = 'X'.
+  ENDSELECT.
+  IF sy-subrc = 0.
+    LOOP AT et_ship_details ASSIGNING <lfs_shipment_details>.
+      <lfs_shipment_details>-invoice = <lfs_shipment_details>-ibd_no.
+    ENDLOOP.
+  ENDIF.
+* Added by SN Das CD:8082040(End)
+
+ENDFUNCTION.
